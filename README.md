@@ -16,8 +16,14 @@ cd webrtc_vad
 ```
 
 The output should be in `build` folder - test app `build/vad_test`
-
+```
+cd build/
+./vad_test
+cd ..
+cat out.txt
+```
 Test app processes `test_wav.wav` and outputs vad predictions to `out.txt`
+Each line signifies prediction for 5 ms interval. These are raw predictions without any smoothing.
 
 # Dependencies
 ```
