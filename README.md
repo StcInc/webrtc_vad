@@ -12,18 +12,29 @@ In order to build you will need g++, cmake. Only linux supported for now.
 ```
 git clone --recursive https://github.com/StcInc/webrtc_vad
 cd webrtc_vad
-./build.sh
+./rebuild.sh
+./run.sh
 ```
-
-The output should be in `build` folder - test app `build/vad_test`
+### Output should look like
 ```
-cd build/
-./vad_test
-cd ..
-cat out.txt
+...
+Predictions:
+[{"start": 0,"end": 0.68,"label": "background"},
+{"start": 0.68,"end": 1.34,"label": "speech"},
+{"start": 1.34,"end": 1.39,"label": "background"},
+{"start": 1.39,"end": 1.74,"label": "speech"},
+{"start": 1.74,"end": 1.78,"label": "background"},
+{"start": 1.78,"end": 2.41,"label": "speech"},
+{"start": 2.41,"end": 2.45,"label": "background"},
+{"start": 2.45,"end": 2.75,"label": "speech"},
+{"start": 2.75,"end": 2.8,"label": "background"},
+{"start": 2.8,"end": 3.28,"label": "speech"},
+{"start": 3.28,"end": 3.74,"label": "background"},
+{"start": 3.74,"end": 5.07,"label": "speech"},
+{"start": 5.07,"end": 5.12,"label": "background"},
+{"start": 5.12,"end": 6.73,"label": "speech"},
+{"start": 6.73,"end": 7,"label": "background"}]
 ```
-Test app processes `test_wav.wav` and outputs vad predictions to `out.txt`
-Each line signifies prediction for 5 ms interval. These are raw predictions without any smoothing.
 
 # Dependencies
 ```
