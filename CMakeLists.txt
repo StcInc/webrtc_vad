@@ -1,14 +1,13 @@
 cmake_minimum_required(VERSION 3.22)
 project(webrtc_vad_build)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 
 add_subdirectory(abseil-cpp)
 
 set(HEADER_FILES
-    src/system_wrappers/include/cpu_features_wrapper.h
     src/common_audio/third_party/spl_sqrt_floor/spl_sqrt_floor.h
     src/common_audio/vad/vad_core.h
     src/common_audio/vad/vad_sp.h
