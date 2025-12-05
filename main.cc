@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include "common_audio/vad/include/webrtc_vad.h"
+#include <vector>
+#include <iostream>
 
 typedef struct  WAV_HEADER
 {
@@ -28,6 +30,12 @@ typedef struct WAV {
     int16_t* audio;
 } Wav;
 
+typedef struct VadSegment {
+    float start;
+    float end;
+    bool is_speech;
+} vad_segment;
+
 Wav* read_wav(const char* filePath) {
     Wav* res = new Wav;
     int headerSize = sizeof(wav_hdr);
@@ -45,11 +53,12 @@ Wav* read_wav(const char* filePath) {
     if (bytesRead > 0)
     {
         res->bytesPerSample = res->header.bitsPerSample / 8;      //Number     of bytes per sample
-        res->numSamples = res->header.ChunkSize / res->bytesPerSample; //How many samples are in the wav file?
-
+        res->numSamples =  res->header.Subchunk2Size / res->bytesPerSample; //How many samples are in the wav file?
+        // std::cout << "Subchunk2Size: " << res->header.Subchunk2Size << std::endl;
         static const uint16_t BUFFER_SIZE = 4096;
 
-        int8_t* buffer = new int8_t[res->bytesPerSample * res->numSamples];
+        std::cout << "Allocating audio buffer of size: " << res->header.Subchunk2Size << " bytes" << std::endl;
+        int8_t* buffer = new int8_t[res->header.Subchunk2Size];
         int8_t* i = buffer;
         while ((bytesRead = fread(i, sizeof(int8_t), BUFFER_SIZE / (sizeof(int8_t)), wavFile)) > 0)
         {
@@ -87,6 +96,7 @@ VadInst *vad_init(VadInst *vadptr)
 
 
 int vad_predict(VadInst *vadptr, const int16_t *buf, int sr, size_t frame_length) {
+    // frame_length - is in samples
     return WebRtcVad_Process(
         vadptr,
         sr,
@@ -96,37 +106,8 @@ int vad_predict(VadInst *vadptr, const int16_t *buf, int sr, size_t frame_length
 }
 
 
-unsigned int count_set_bits(unsigned long long n)
-{
-    unsigned int count = 0;
-    while (n) {
-        n &= (n - 1);
-        count++;
-    }
-    return count;
-}
-
-
-unsigned long long windowed_vad_prediction(VadInst *vadptr, const int16_t *buf, size_t sr, size_t frame_length, unsigned long long window, size_t max_window_width) {
-
-    int cur_pred = vad_predict(vadptr, buf, sr, frame_length);
-
-    window = (window << 1) + cur_pred;
-
-    /* 1 -> 0001000 -> 0000111 (for max_window_width == 3) */
-    unsigned long long mask = (1 << (max_window_width + 1)) - 1;
-
-    window = window & mask;
-
-    return window;
-}
-
-
-
-
-
-int main() {
-    printf("Hello, Mike!\n");
+int main(int argc, char** argv) {
+    std::cout << "Initializing vad" << std::endl;
 
     VadInst* vad = vad_create();
     vad = vad_init(vad);
@@ -136,21 +117,68 @@ int main() {
         printf("Failed to init vad!\n");
     }
 
-    Wav* wav = read_wav("../test_wav.wav");
+    std::cout << "Args provided (" << argc << "):" << std::endl;
+    for (int i = 0; i < argc; ++i) {
+        std::cout << "\t" << argv[i] << std::endl;
+    }
+
+    const char* audio_filepath = argc == 2 ? argv[1] : "./test_wav.wav";
+    std::cout << "Making vad predictions for:" << std::endl << "\t" << audio_filepath << std::endl;
+    
+    Wav* wav = read_wav(audio_filepath);
     if (!wav) {
+        std::cout << "Failed to load test_wav" << std::endl;
         vad_free(vad);
         return 1;
     }
 
-    int i = 0;
-    int step = 160;
-    FILE* out = fopen("../out.txt", "w");
-    while (i < wav->numSamples * wav->bytesPerSample) {
-        int res = vad_predict(vad, wav->audio + i, wav->header.SamplesPerSec, 320);
-        fprintf(out, "%d\n", res);
-        i += step;
+    // TODO: move to separate function to simplify audio predictions 
+    bool is_speech = false;
+    std::vector<VadSegment> res;
+    const size_t frame_len = 160; // in samples
+    int sr = wav->header.SamplesPerSec;
+    int bytes_per_sample = wav->bytesPerSample;
+    std::cout << "Predicting..." << std::endl;
+
+    std::cout << "Sample rate: " << sr << std::endl;
+    std::cout << "Bytes per sample: " << bytes_per_sample << std::endl;
+    std::cout << "Total prediction steps: " << wav->numSamples / frame_len << std::endl;
+
+    for (int i = 0; i < wav->numSamples / frame_len; ++i) { 
+        is_speech = vad_predict(vad, &wav->audio[i * frame_len], sr, frame_len);
+        //std::cout << (i + 1) * frame_len << " " << float((i + 1) * frame_len) / float(sr) <<  " " << is_speech << std::endl;
+        if (!res.size() || res.back().is_speech != is_speech) {
+            res.push_back({
+                float(i * frame_len) / float(sr),
+                float((i + 1) * frame_len) / float(sr),
+                is_speech
+            });
+        }
+        else {
+            res.back().end = float((i + 1) * frame_len) / float(sr);
+        }
     }
-    fclose(out);
+
+    // output json results 
+    if (res.size()) {
+        std::cout << "Predictions:" << std::endl << "[";
+        int i = 0;
+        for (auto & segm: res) {
+            std::cout << "{"
+                      << "\"start\": " << segm.start << ","
+                      << "\"end\": " << segm.end << ","
+                      << "\"label\": " << (segm.is_speech ? "\"speech\"" : "\"background\"");
+            ++i;
+            if (i < res.size()) {
+                std::cout << "}," << std::endl;
+            }
+        }
+        std::cout << "}]" << std::endl;
+    }
+    else {
+        std::cout << "[]" << std::endl;
+    }
+    
     delete wav->audio;
     delete wav;
     vad_free(vad);
